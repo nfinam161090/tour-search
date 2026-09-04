@@ -88,7 +88,62 @@
 
 </div>
 
+<div id="lightbox" class="lightbox">
 
+  <button
+    class="lightbox-close"
+    onclick="closeLightbox()"
+  >
+    ×
+  </button>
+
+
+  <button
+    class="lightbox-prev"
+    onclick="previousImage()"
+  >
+    ‹
+  </button>
+
+
+  <div class="lightbox-content">
+
+    <img
+      id="lightboxImage"
+      src=""
+      alt=""
+    >
+
+
+    <div class="lightbox-toolbar">
+
+      <span id="lightboxCounter">
+        1 / 1
+      </span>
+
+
+      <a
+        id="downloadImage"
+        class="download-button"
+        href="#"
+        target="_blank"
+      >
+        ⬇ Скачать
+      </a>
+
+    </div>
+
+  </div>
+
+
+  <button
+    class="lightbox-next"
+    onclick="nextImage()"
+  >
+    ›
+  </button>
+
+</div>
 <script src="script.js"></script>
 
 </body>
