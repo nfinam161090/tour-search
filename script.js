@@ -163,7 +163,7 @@ function openTour(id) {
 
   const modal =
     document.getElementById("modal");
-
+    modal.dataset.tourId = tour.ID;
   const body =
     document.getElementById("modalBody");
 
@@ -247,6 +247,153 @@ function openTour(id) {
 
 }
 
+let currentImageIndex = 0;
+
+
+function openLightbox(index) {
+
+  const tour =
+    tours.find(
+      t =>
+        t.ID ===
+        getCurrentTourId()
+    );
+
+  if (!tour) return;
+
+  const images =
+    tour.IMAGES || [];
+
+  if (!images.length) return;
+
+  currentImageIndex = index;
+
+  showLightboxImage();
+
+}
+
+
+function getCurrentTourId() {
+
+  const modal =
+    document.getElementById("modal");
+
+  const title =
+    modal.dataset.tourId;
+
+  return title;
+
+}
+
+
+function showLightboxImage() {
+
+  const tour =
+    tours.find(
+      t =>
+        t.ID ===
+        getCurrentTourId()
+    );
+
+  if (!tour) return;
+
+  const images =
+    tour.IMAGES || [];
+
+  if (!images.length) return;
+
+  const image =
+    images[currentImageIndex];
+
+
+  document.getElementById(
+    "lightboxImage"
+  ).src = image.url;
+
+
+  document.getElementById(
+    "downloadImage"
+  ).href = image.download;
+
+
+  document.getElementById(
+    "lightboxCounter"
+  ).textContent =
+    `${currentImageIndex + 1} / ${images.length}`;
+
+
+  document.getElementById(
+    "lightbox"
+  ).style.display = "flex";
+
+}
+
+
+function previousImage() {
+
+  const tour =
+    tours.find(
+      t =>
+        t.ID ===
+        getCurrentTourId()
+    );
+
+  if (!tour) return;
+
+  const images =
+    tour.IMAGES || [];
+
+  if (!images.length) return;
+
+  currentImageIndex--;
+
+  if (currentImageIndex < 0) {
+    currentImageIndex =
+      images.length - 1;
+  }
+
+  showLightboxImage();
+
+}
+
+
+function nextImage() {
+
+  const tour =
+    tours.find(
+      t =>
+        t.ID ===
+        getCurrentTourId()
+    );
+
+  if (!tour) return;
+
+  const images =
+    tour.IMAGES || [];
+
+  if (!images.length) return;
+
+  currentImageIndex++;
+
+  if (
+    currentImageIndex >=
+    images.length
+  ) {
+    currentImageIndex = 0;
+  }
+
+  showLightboxImage();
+
+}
+
+
+function closeLightbox() {
+
+  document.getElementById(
+    "lightbox"
+  ).style.display = "none";
+
+}
 
 document
   .getElementById("closeModal")
