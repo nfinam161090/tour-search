@@ -168,48 +168,76 @@ function openTour(id) {
     document.getElementById("modalBody");
 
 
-  let galleryHTML = "";
+  const images =
+    tour.IMAGES || [];
 
 
-  if (
-    tour.IMAGES &&
-    tour.IMAGES.length
-  ) {
+  const galleryHTML =
+    images.map((image, index) => {
 
-    galleryHTML =
-      tour.IMAGES
-        .map(image => `
+      return `
+        <div
+          class="gallery-item"
+          onclick="openLightbox(${index})"
+        >
+
           <img
-            src="${image}"
+            src="${image.url}"
             alt="${tour.NAME_RU || ""}"
             loading="lazy"
           >
-        `)
-        .join("");
 
-  }
+          <div class="gallery-overlay">
+            🔍
+          </div>
+
+        </div>
+      `;
+
+    }).join("");
 
 
   body.innerHTML = `
 
-    <div class="modal-title">
-      ${tour.NAME_RU || ""}
-    </div>
+    <div class="tour-detail">
 
-    <p>
-      ${tour.DESCRIPTION_RU || ""}
-    </p>
+      <div class="modal-title">
+        ${tour.NAME_RU || ""}
+      </div>
 
-    <div class="price">
+
+      ${
+        tour.DESCRIPTION_RU
+        ?
+        `
+        <div class="tour-description">
+          ${tour.DESCRIPTION_RU}
+        </div>
+        `
+        :
+        ""
+      }
+
+
       ${
         tour.PRICE
-        ? "$" + tour.PRICE
-        : ""
+        ?
+        `
+        <div class="price">
+          $${tour.PRICE}
+        </div>
+        `
+        :
+        ""
       }
-    </div>
 
-    <div class="gallery">
-      ${galleryHTML}
+
+      <div class="gallery">
+
+        ${galleryHTML}
+
+      </div>
+
     </div>
 
   `;
