@@ -344,3 +344,15 @@ img { max-width: 100%; }
   .detail-info-row { display: block; }
   .detail-info-row span { display: block; margin-top: 5px; }
 }
+#viewerStage {
+  touch-action: none;
+  overflow: hidden;
+}
+
+#viewerImage {
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
