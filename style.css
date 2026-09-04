@@ -524,3 +524,26 @@ main {
 .lightbox {
   outline: none;
 }
+.tour-card-text {
+  min-height: 170px;
+
+  display: flex;
+
+  align-items: center;
+}
+
+
+.tour-card-text .card-body {
+  width: 100%;
+}
+
+
+.gallery-loading {
+  text-align: center;
+
+  padding: 40px 20px;
+
+  color: #777;
+
+  font-size: 16px;
+}
