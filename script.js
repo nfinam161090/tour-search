@@ -46,85 +46,90 @@ function renderTours() {
 
   const search =
     normalize(
-      document.getElementById("searchInput").value
+      document.getElementById(
+        "searchInput"
+      ).value
     );
 
+
   const results =
-    tours.filter(tour => {
+    tours.filter(
+      tour => {
 
-      const categoryMatch =
-        currentCategory === "ALL" ||
-        tour.CATEGORY === currentCategory;
+        const categoryMatch =
+          currentCategory === "ALL" ||
+          tour.CATEGORY ===
+            currentCategory;
 
-      const searchableText = normalize(
-        [
-          tour.NAME_RU,
-          tour.NAME_EN,
-          tour.DESCRIPTION_RU,
-          tour.DESCRIPTION_EN,
-          tour.KEYWORDS_RU,
-          tour.KEYWORDS_EN
-        ].join(" ")
-      );
 
-      const searchMatch =
-        !search ||
-        searchableText.includes(search);
+        const searchableText =
+          normalize(
+            [
+              tour.NAME_RU,
+              tour.NAME_EN,
+              tour.DESCRIPTION_RU,
+              tour.DESCRIPTION_EN,
+              tour.KEYWORDS_RU,
+              tour.KEYWORDS_EN
+            ].join(" ")
+          );
 
-      return categoryMatch && searchMatch;
 
-    });
+        const searchMatch =
+          !search ||
+          searchableText.includes(
+            search
+          );
+
+
+        return (
+          categoryMatch &&
+          searchMatch
+        );
+
+      }
+    );
+
 
   const container =
-    document.getElementById("results");
+    document.getElementById(
+      "results"
+    );
+
 
   if (!results.length) {
 
     container.innerHTML = `
+
       <div class="no-results">
         Ничего не найдено.
       </div>
+
     `;
 
     return;
+
   }
 
+
+  /*
+   * ==================================
+   * KHÔNG CÓ <img>
+   * ==================================
+   *
+   * Đây là điểm giúp trang chính
+   * tải nhanh.
+   */
+
   container.innerHTML =
-    results.map(tour => {
+    results
+      .map(
+        tour => `
 
-      const image =
-        tour.MAIN_IMAGE ||
-        (
-          tour.IMAGES &&
-          tour.IMAGES.length
-            ? tour.IMAGES[0]
-            : ""
-        );
-
-      return `
         <article
-          class="card"
+          class="card tour-card-text"
           onclick="openTour('${tour.ID}')"
         >
-
-          ${
-            image
-            ?
-            `
-            <img
-              class="card-image"
-              src="${image}"
-              alt="${tour.NAME_RU || ""}"
-              loading="lazy"
-            >
-            `
-            :
-            `
-            <div class="card-image no-image">
-              Нет изображения
-            </div>
-            `
-          }
 
           <div class="card-body">
 
@@ -132,70 +137,72 @@ function renderTours() {
               ${tour.NAME_RU || ""}
             </div>
 
-            <div class="card-description">
-              ${tour.DESCRIPTION_RU || ""}
-            </div>
+            ${
+              tour.DESCRIPTION_RU
+              ?
+              `
+              <div class="card-description">
+                ${tour.DESCRIPTION_RU}
+              </div>
+              `
+              :
+              ""
+            }
 
-            <div class="price">
-              ${
-                tour.PRICE
-                ? "$" + tour.PRICE
-                : ""
-              }
-            </div>
+            ${
+              tour.PRICE
+              ?
+              `
+              <div class="price">
+                $${tour.PRICE}
+              </div>
+              `
+              :
+              ""
+            }
 
           </div>
 
         </article>
-      `;
 
-    }).join("");
+      `
+      )
+      .join("");
 
 }
 
 
-function openTour(id) {
+function openTour(id) {async function openTour(id) {
 
   const tour =
-    tours.find(t => t.ID === id);
+    tours.find(
+      t => t.ID === id
+    );
 
   if (!tour) return;
 
+
   const modal =
-    document.getElementById("modal");
-    modal.dataset.tourId = tour.ID;
+    document.getElementById(
+      "modal"
+    );
+
+
+  modal.dataset.tourId =
+    tour.ID;
+
+
   const body =
-    document.getElementById("modalBody");
+    document.getElementById(
+      "modalBody"
+    );
 
 
-  const images =
-    tour.IMAGES || [];
-
-
-  const galleryHTML =
-    images.map((image, index) => {
-
-      return `
-        <div
-          class="gallery-item"
-          onclick="openLightbox(${index})"
-        >
-
-          <img
-            src="${image.url}"
-            alt="${tour.NAME_RU || ""}"
-            loading="lazy"
-          >
-
-          <div class="gallery-overlay">
-            🔍
-          </div>
-
-        </div>
-      `;
-
-    }).join("");
-
+  /*
+   * Hiện thông tin TOUR ngay lập tức
+   *
+   * Chưa tải ảnh
+   */
 
   body.innerHTML = `
 
@@ -204,7 +211,6 @@ function openTour(id) {
       <div class="modal-title">
         ${tour.NAME_RU || ""}
       </div>
-
 
       ${
         tour.DESCRIPTION_RU
@@ -218,7 +224,6 @@ function openTour(id) {
         ""
       }
 
-
       ${
         tour.PRICE
         ?
@@ -231,11 +236,17 @@ function openTour(id) {
         ""
       }
 
+      <div
+        id="galleryLoading"
+        class="gallery-loading"
+      >
+        Загрузка фотографий...
+      </div>
 
-      <div class="gallery">
-
-        ${galleryHTML}
-
+      <div
+        id="tourGallery"
+        class="gallery"
+      >
       </div>
 
     </div>
@@ -243,7 +254,115 @@ function openTour(id) {
   `;
 
 
-  modal.style.display = "flex";
+  modal.style.display =
+    "flex";
+
+
+  /*
+   * =================================
+   * BẮT ĐẦU LOAD ẢNH
+   * =================================
+   */
+
+  const gallery =
+    document.getElementById(
+      "tourGallery"
+    );
+
+
+  const loading =
+    document.getElementById(
+      "galleryLoading"
+    );
+
+
+  try {
+
+    const response =
+      await fetch(
+        API_URL +
+        "?action=images&id=" +
+        encodeURIComponent(
+          tour.DRIVE_FOLDER_ID
+        )
+      );
+
+
+    const images =
+      await response.json();
+
+
+    /*
+     * Lưu ảnh vào tour hiện tại
+     */
+
+    tour.IMAGES =
+      images;
+
+
+    /*
+     * Không có ảnh
+     */
+
+    if (
+      !Array.isArray(images) ||
+      images.length === 0
+    ) {
+
+      loading.textContent =
+        "Фотографии отсутствуют";
+
+      return;
+
+    }
+
+
+    loading.style.display =
+      "none";
+
+
+    /*
+     * Hiển thị gallery
+     */
+
+    gallery.innerHTML =
+      images
+        .map(
+          (image, index) => `
+
+          <div
+            class="gallery-item"
+            onclick="openLightbox(${index})"
+          >
+
+            <img
+              src="${image.url}"
+              alt="${tour.NAME_RU || ""}"
+              loading="lazy"
+            >
+
+            <div
+              class="gallery-overlay"
+            >
+              🔍
+            </div>
+
+          </div>
+
+        `
+        )
+        .join("");
+
+
+  } catch (error) {
+
+    console.error(error);
+
+
+    loading.textContent =
+      "Не удалось загрузить фотографии.";
+
+  }
 
 }
 
