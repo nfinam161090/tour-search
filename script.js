@@ -80,10 +80,11 @@ function renderTours() {
 
   if (!results.length) {
 
-    container.innerHTML =
-      `<div class="no-results">
+    container.innerHTML = `
+      <div class="no-results">
         Ничего не найдено.
-      </div>`;
+      </div>
+    `;
 
     return;
   }
@@ -91,22 +92,44 @@ function renderTours() {
   container.innerHTML =
     results.map(tour => {
 
+      const image =
+        tour.MAIN_IMAGE ||
+        (
+          tour.IMAGES &&
+          tour.IMAGES.length
+            ? tour.IMAGES[0]
+            : ""
+        );
+
       return `
         <article
           class="card"
           onclick="openTour('${tour.ID}')"
         >
 
-          <img
-            class="card-image"
-            src="${tour.MAIN_IMAGE || ''}"
-            alt="${tour.NAME_RU}"
-          >
+          ${
+            image
+            ?
+            `
+            <img
+              class="card-image"
+              src="${image}"
+              alt="${tour.NAME_RU || ""}"
+              loading="lazy"
+            >
+            `
+            :
+            `
+            <div class="card-image no-image">
+              Нет изображения
+            </div>
+            `
+          }
 
           <div class="card-body">
 
             <div class="card-title">
-              ${tour.NAME_RU}
+              ${tour.NAME_RU || ""}
             </div>
 
             <div class="card-description">
@@ -114,7 +137,11 @@ function renderTours() {
             </div>
 
             <div class="price">
-              ${tour.PRICE ? "$" + tour.PRICE : ""}
+              ${
+                tour.PRICE
+                ? "$" + tour.PRICE
+                : ""
+              }
             </div>
 
           </div>
