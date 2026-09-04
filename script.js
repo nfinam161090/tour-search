@@ -250,13 +250,16 @@ function openTour(id) {
 let currentImageIndex = 0;
 
 
+/* =========================
+   OPEN LIGHTBOX
+========================= */
+
 function openLightbox(index) {
 
   const tour =
     tours.find(
       t =>
-        t.ID ===
-        getCurrentTourId()
+        t.ID === getCurrentTourId()
     );
 
   if (!tour) return;
@@ -273,26 +276,30 @@ function openLightbox(index) {
 }
 
 
+/* =========================
+   GET CURRENT TOUR
+========================= */
+
 function getCurrentTourId() {
 
   const modal =
     document.getElementById("modal");
 
-  const title =
-    modal.dataset.tourId;
-
-  return title;
+  return modal.dataset.tourId;
 
 }
 
+
+/* =========================
+   SHOW IMAGE
+========================= */
 
 function showLightboxImage() {
 
   const tour =
     tours.find(
       t =>
-        t.ID ===
-        getCurrentTourId()
+        t.ID === getCurrentTourId()
     );
 
   if (!tour) return;
@@ -302,23 +309,38 @@ function showLightboxImage() {
 
   if (!images.length) return;
 
+
   const image =
     images[currentImageIndex];
 
 
-  document.getElementById(
-    "lightboxImage"
-  ).src = image.url;
+  const lightboxImage =
+    document.getElementById(
+      "lightboxImage"
+    );
 
 
-  document.getElementById(
-    "downloadImage"
-  ).href = image.download;
+  const downloadImage =
+    document.getElementById(
+      "downloadImage"
+    );
 
 
-  document.getElementById(
-    "lightboxCounter"
-  ).textContent =
+  const counter =
+    document.getElementById(
+      "lightboxCounter"
+    );
+
+
+  lightboxImage.src =
+    image.url;
+
+
+  downloadImage.href =
+    image.download;
+
+
+  counter.textContent =
     `${currentImageIndex + 1} / ${images.length}`;
 
 
@@ -326,16 +348,30 @@ function showLightboxImage() {
     "lightbox"
   ).style.display = "flex";
 
+
+  /*
+   * Khi mở ảnh:
+   * đưa con trỏ về lightbox để
+   * bàn phím hoạt động ngay
+   */
+
+  document
+    .getElementById("lightbox")
+    .focus();
+
 }
 
+
+/* =========================
+   PREVIOUS IMAGE
+========================= */
 
 function previousImage() {
 
   const tour =
     tours.find(
       t =>
-        t.ID ===
-        getCurrentTourId()
+        t.ID === getCurrentTourId()
     );
 
   if (!tour) return;
@@ -345,25 +381,33 @@ function previousImage() {
 
   if (!images.length) return;
 
+
   currentImageIndex--;
 
+
   if (currentImageIndex < 0) {
+
     currentImageIndex =
       images.length - 1;
+
   }
+
 
   showLightboxImage();
 
 }
 
+
+/* =========================
+   NEXT IMAGE
+========================= */
 
 function nextImage() {
 
   const tour =
     tours.find(
       t =>
-        t.ID ===
-        getCurrentTourId()
+        t.ID === getCurrentTourId()
     );
 
   if (!tour) return;
@@ -373,25 +417,241 @@ function nextImage() {
 
   if (!images.length) return;
 
+
   currentImageIndex++;
+
 
   if (
     currentImageIndex >=
     images.length
   ) {
+
     currentImageIndex = 0;
+
   }
+
 
   showLightboxImage();
 
 }
 
 
+/* =========================
+   CLOSE LIGHTBOX
+========================= */
+
 function closeLightbox() {
 
+  const lightbox =
+    document.getElementById(
+      "lightbox"
+    );
+
+  lightbox.style.display =
+    "none";
+
+}
+
+
+/* =========================
+   KEYBOARD CONTROL
+========================= */
+
+document.addEventListener(
+  "keydown",
+  function(event) {
+
+    const lightbox =
+      document.getElementById(
+        "lightbox"
+      );
+
+
+    /*
+     * Nếu lightbox đang đóng
+     * thì không làm gì
+     */
+
+    if (
+      !lightbox ||
+      lightbox.style.display !== "flex"
+    ) {
+
+      return;
+
+    }
+
+
+    /*
+     * Mũi tên trái
+     */
+
+    if (
+      event.key === "ArrowLeft"
+    ) {
+
+      event.preventDefault();
+
+      previousImage();
+
+      return;
+
+    }
+
+
+    /*
+     * Mũi tên phải
+     */
+
+    if (
+      event.key === "ArrowRight"
+    ) {
+
+      event.preventDefault();
+
+      nextImage();
+
+      return;
+
+    }
+
+
+    /*
+     * ESC
+     */
+
+    if (
+      event.key === "Escape"
+    ) {
+
+      event.preventDefault();
+
+      closeLightbox();
+
+      return;
+
+    }
+
+  }
+);
+
+
+/* =========================
+   TOUCH / SWIPE
+========================= */
+
+let touchStartX = 0;
+let touchStartY = 0;
+
+let touchEndX = 0;
+let touchEndY = 0;
+
+
+const lightbox =
   document.getElementById(
     "lightbox"
-  ).style.display = "none";
+  );
+
+
+lightbox.addEventListener(
+  "touchstart",
+  function(event) {
+
+    if (!event.touches.length) {
+      return;
+    }
+
+    touchStartX =
+      event.touches[0].clientX;
+
+    touchStartY =
+      event.touches[0].clientY;
+
+  },
+  { passive: true }
+);
+
+
+lightbox.addEventListener(
+  "touchend",
+  function(event) {
+
+    if (!event.changedTouches.length) {
+      return;
+    }
+
+    touchEndX =
+      event.changedTouches[0].clientX;
+
+    touchEndY =
+      event.changedTouches[0].clientY;
+
+
+    handleSwipe();
+
+  },
+  { passive: true }
+);
+
+
+function handleSwipe() {
+
+  const differenceX =
+    touchEndX - touchStartX;
+
+
+  const differenceY =
+    touchEndY - touchStartY;
+
+
+  /*
+   * Chỉ xử lý vuốt ngang.
+   * Không xử lý nếu người dùng
+   * đang vuốt lên/xuống.
+   */
+
+  if (
+    Math.abs(differenceX) <
+    50
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    Math.abs(differenceX) <
+    Math.abs(differenceY)
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+   * Vuốt sang trái
+   * → ảnh tiếp theo
+   */
+
+  if (differenceX < 0) {
+
+    nextImage();
+
+  }
+
+
+  /*
+   * Vuốt sang phải
+   * → ảnh trước
+   */
+
+  else {
+
+    previousImage();
+
+  }
 
 }
 
