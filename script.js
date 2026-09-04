@@ -167,10 +167,33 @@ function openTour(id) {
   const body =
     document.getElementById("modalBody");
 
+
+  let galleryHTML = "";
+
+
+  if (
+    tour.IMAGES &&
+    tour.IMAGES.length
+  ) {
+
+    galleryHTML =
+      tour.IMAGES
+        .map(image => `
+          <img
+            src="${image}"
+            alt="${tour.NAME_RU || ""}"
+            loading="lazy"
+          >
+        `)
+        .join("");
+
+  }
+
+
   body.innerHTML = `
 
     <div class="modal-title">
-      ${tour.NAME_RU}
+      ${tour.NAME_RU || ""}
     </div>
 
     <p>
@@ -178,22 +201,19 @@ function openTour(id) {
     </p>
 
     <div class="price">
-      ${tour.PRICE ? "$" + tour.PRICE : ""}
+      ${
+        tour.PRICE
+        ? "$" + tour.PRICE
+        : ""
+      }
     </div>
 
     <div class="gallery">
-
-      ${
-        tour.MAIN_IMAGE
-        ?
-        `<img src="${tour.MAIN_IMAGE}">`
-        :
-        ""
-      }
-
+      ${galleryHTML}
     </div>
 
   `;
+
 
   modal.style.display = "flex";
 
