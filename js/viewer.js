@@ -4,135 +4,88 @@
   const viewer = document.getElementById("viewer");
   const stage = document.getElementById("viewerStage");
   const image = document.getElementById("viewerImage");
+
   const closeBtn = document.getElementById("viewerClose");
   const prevBtn = document.getElementById("viewerPrev");
   const nextBtn = document.getElementById("viewerNext");
   const counter = document.getElementById("viewerCounter");
 
   if (!viewer || !stage || !image) {
-    console.error("TourViewer: thiếu phần tử viewer trong HTML.");
+    console.error("TourViewer: viewerStage / viewerImage không tồn tại.");
     return;
   }
 
+  /* =========================================================
+     DATA
+  ========================================================= */
+
   let items = [];
-  let index = 0;
+  let currentIndex = 0;
 
-  // Zoom
-  let scale = 1;
+  /* =========================================================
+     ZOOM
+     
+     Rất bảo thủ:
+     1.0x -> bình thường
+     1.5x -> zoom nhẹ
+     2.0x -> khá lớn
+     2.5x -> tối đa mặc định
+     
+     Không cho zoom 4x nữa.
+  ========================================================= */
+
   const MIN_SCALE = 1;
-  const MAX_SCALE = 4;
+  const MAX_SCALE = 2.5;
 
-  // Position
+  let scale = 1;
+
   let offsetX = 0;
   let offsetY = 0;
 
-  // Single pointer / swipe / drag
-  let dragging = false;
+  /* =========================================================
+     POINTER
+  ========================================================= */
+
+  const pointers = new Map();
+
+  let gesture = "none";
+
+  /* swipe / drag */
+  let gestureStartX = 0;
+  let gestureStartY = 0;
+
+  let startOffsetX = 0;
+  let startOffsetY = 0;
+
   let moved = false;
-  let startX = 0;
-  let startY = 0;
-  let dragStartX = 0;
-  let dragStartY = 0;
 
-  // Multi-touch
-  const pointerMap = new Map();
-
+  /* pinch */
   let pinchStartDistance = 0;
   let pinchStartScale = 1;
 
-  // Điểm trên ảnh đang nằm dưới tâm pinch.
+  let pinchMidStartX = 0;
+  let pinchMidStartY = 0;
+
   let pinchAnchorX = 0;
   let pinchAnchorY = 0;
 
-  let pinchActive = false;
 
-  // --------------------------------------------------
-  // PRELOAD
-  // --------------------------------------------------
+  /* =========================================================
+     UTILS
+  ========================================================= */
 
-  function preload(src) {
-    if (!src) return;
-
-    const img = new Image();
-    img.decoding = "async";
-    img.src = src;
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
 
 
-  // --------------------------------------------------
-  // RESET
-  // --------------------------------------------------
-
-  function resetZoom() {
-    scale = 1;
-    offsetX = 0;
-    offsetY = 0;
-
-    applyTransform();
+  function getStageRect() {
+    return stage.getBoundingClientRect();
   }
 
 
-  // --------------------------------------------------
-  // CLAMP
-  // --------------------------------------------------
-
-  function clampOffsets() {
-    if (scale <= 1) {
-      offsetX = 0;
-      offsetY = 0;
-      return;
-    }
-
-    const rect = stage.getBoundingClientRect();
-
-    if (!rect.width || !rect.height) {
-      return;
-    }
-
-    const maxX =
-      (rect.width * (scale - 1)) / 2;
-
-    const maxY =
-      (rect.height * (scale - 1)) / 2;
-
-    offsetX = Math.max(
-      -maxX,
-      Math.min(maxX, offsetX)
-    );
-
-    offsetY = Math.max(
-      -maxY,
-      Math.min(maxY, offsetY)
-    );
-  }
-
-
-  // --------------------------------------------------
-  // APPLY TRANSFORM
-  // --------------------------------------------------
-
-  function applyTransform() {
-    clampOffsets();
-
-    image.style.transform =
-      `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
-
-    image.classList.toggle(
-      "zoomed",
-      scale > 1.001
-    );
-  }
-
-
-  // --------------------------------------------------
-  // GET LOCAL STAGE POSITION
-  //
-  // Tọa độ tính từ tâm stage.
-  // --------------------------------------------------
-
-  function getLocalPoint(clientX, clientY) {
-    const rect =
-      stage.getBoundingClientRect();
+  function localPoint(clientX, clientY) {
+    const rect = getStageRect();
 
     return {
       x:
@@ -146,49 +99,149 @@
   }
 
 
-  // --------------------------------------------------
-  // SMOOTH ZOOM AT A POINT
-  //
-  // Giữ đúng điểm đang được chạm.
-  // Đây là phần quan trọng nhất.
-  // --------------------------------------------------
+  function distance(a, b) {
+    return Math.hypot(
+      b.clientX - a.clientX,
+      b.clientY - a.clientY
+    );
+  }
+
+
+  function midpoint(a, b) {
+    return {
+      x: (a.clientX + b.clientX) / 2,
+      y: (a.clientY + b.clientY) / 2
+    };
+  }
+
+
+  function getImageSource(item) {
+    if (!item) return "";
+
+    return (
+      item.medium ||
+      item.original ||
+      item.thumbnail ||
+      ""
+    );
+  }
+
+
+  /* =========================================================
+     PRELOAD
+  ========================================================= */
+
+  function preload(src) {
+    if (!src) return;
+
+    const img = new Image();
+
+    img.decoding = "async";
+    img.src = src;
+  }
+
+
+  /* =========================================================
+     OFFSET LIMIT
+  ========================================================= */
+
+  function clampOffsets() {
+    if (scale <= 1) {
+      offsetX = 0;
+      offsetY = 0;
+      return;
+    }
+
+    const rect = getStageRect();
+
+    /*
+     * Chỉ cho kéo trong phạm vi ảnh thực sự có thể di chuyển.
+     */
+    const maxX =
+      Math.max(0, rect.width * (scale - 1) / 2);
+
+    const maxY =
+      Math.max(0, rect.height * (scale - 1) / 2);
+
+    offsetX = clamp(
+      offsetX,
+      -maxX,
+      maxX
+    );
+
+    offsetY = clamp(
+      offsetY,
+      -maxY,
+      maxY
+    );
+  }
+
+
+  /* =========================================================
+     APPLY
+     
+     CHỈ JS được quyền thay transform.
+     
+     CSS KHÔNG được scale ảnh.
+  ========================================================= */
+
+  function applyTransform() {
+    clampOffsets();
+
+    image.style.transform =
+      `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
+  }
+
+
+  /* =========================================================
+     RESET
+  ========================================================= */
+
+  function resetZoom() {
+    scale = 1;
+
+    offsetX = 0;
+    offsetY = 0;
+
+    applyTransform();
+  }
+
+
+  /* =========================================================
+     ZOOM AT POINT
+     
+     Zoom nhẹ hơn.
+  ========================================================= */
 
   function zoomAt(
-    nextScale,
+    targetScale,
     clientX,
     clientY
   ) {
     const oldScale = scale;
 
-    const newScale =
-      Math.max(
-        MIN_SCALE,
-        Math.min(MAX_SCALE, nextScale)
-      );
+    const newScale = clamp(
+      targetScale,
+      MIN_SCALE,
+      MAX_SCALE
+    );
 
-    if (newScale === oldScale) {
+    if (Math.abs(newScale - oldScale) < 0.001) {
       return;
     }
 
     const point =
-      getLocalPoint(
+      localPoint(
         clientX,
         clientY
       );
 
-    /*
-     * Công thức:
-     *
-     * offset mới =
-     * point + (offset cũ - point) * scaleRatio
-     *
-     * Nhờ vậy điểm đang được zoom
-     * sẽ vẫn nằm dưới ngón tay / chuột.
-     */
-
     const ratio =
       newScale / oldScale;
 
+    /*
+     * Giữ vị trí dưới chuột/ngón tay.
+     */
     offsetX =
       point.x +
       (offsetX - point.x) * ratio;
@@ -209,100 +262,70 @@
   }
 
 
-  // --------------------------------------------------
-  // SET ZOOM WITHOUT FOCAL POINT
-  // --------------------------------------------------
-
-  function setZoom(nextScale) {
-    const newScale =
-      Math.max(
-        MIN_SCALE,
-        Math.min(MAX_SCALE, nextScale)
-      );
-
-    scale = newScale;
-
-    if (scale <= 1) {
-      scale = 1;
-      offsetX = 0;
-      offsetY = 0;
-    }
-
-    applyTransform();
-  }
-
-
-  // --------------------------------------------------
-  // RENDER
-  // --------------------------------------------------
+  /* =========================================================
+     CHANGE IMAGE
+  ========================================================= */
 
   function render() {
-    if (!items.length) {
-      return;
-    }
+    if (!items.length) return;
 
     const item =
-      items[index];
+      items[currentIndex];
 
     const src =
-      item.medium ||
-      item.original ||
-      item.thumbnail ||
-      "";
+      getImageSource(item);
 
     image.src = src;
 
     image.alt =
-      `Фото ${index + 1}`;
+      `Фото ${currentIndex + 1}`;
 
-    counter.textContent =
-      `${index + 1} / ${items.length}`;
+    if (counter) {
+      counter.textContent =
+        `${currentIndex + 1} / ${items.length}`;
+    }
 
     resetZoom();
 
     /*
-     * Chỉ preload ảnh tiếp theo.
+     * Chỉ preload ảnh kế tiếp.
      */
-
-    const next =
+    const nextItem =
       items[
-        (index + 1) % items.length
+        (currentIndex + 1) %
+        items.length
       ];
 
-    if (next) {
+    if (nextItem) {
       preload(
-        next.medium ||
-        next.original ||
-        next.thumbnail
+        getImageSource(nextItem)
       );
     }
   }
 
 
-  // --------------------------------------------------
-  // OPEN
-  // --------------------------------------------------
+  /* =========================================================
+     OPEN
+  ========================================================= */
 
   function open(
-    nextItems,
+    newItems,
     startIndex = 0
   ) {
     items =
-      Array.isArray(nextItems)
-        ? nextItems
+      Array.isArray(newItems)
+        ? newItems
         : [];
 
     if (!items.length) {
       return;
     }
 
-    index =
-      Math.max(
+    currentIndex =
+      clamp(
+        Number(startIndex) || 0,
         0,
-        Math.min(
-          startIndex,
-          items.length - 1
-        )
+        items.length - 1
       );
 
     viewer.hidden = false;
@@ -311,13 +334,15 @@
       "viewer-open"
     );
 
+    pointerReset();
+
     render();
   }
 
 
-  // --------------------------------------------------
-  // CLOSE
-  // --------------------------------------------------
+  /* =========================================================
+     CLOSE
+  ========================================================= */
 
   function close() {
     viewer.hidden = true;
@@ -326,100 +351,111 @@
       "viewer-open"
     );
 
+    pointerReset();
+
+    resetZoom();
+
     items = [];
 
     image.removeAttribute("src");
-
-    pointerMap.clear();
-
-    dragging = false;
-    pinchActive = false;
-
-    resetZoom();
   }
 
 
-  // --------------------------------------------------
-  // NAVIGATION
-  // --------------------------------------------------
+  /* =========================================================
+     NAVIGATION
+  ========================================================= */
 
   function go(step) {
-    if (!items.length) {
-      return;
-    }
+    if (!items.length) return;
 
-    index =
+    currentIndex =
       (
-        index +
+        currentIndex +
         step +
         items.length
-      ) % items.length;
+      ) %
+      items.length;
+
+    pointerReset();
 
     render();
   }
 
 
-  // --------------------------------------------------
-  // DISTANCE BETWEEN TWO POINTERS
-  // --------------------------------------------------
+  /* =========================================================
+     POINTER RESET
+  ========================================================= */
 
-  function distance(a, b) {
-    return Math.hypot(
-      a.clientX - b.clientX,
-      a.clientY - b.clientY
-    );
+  function pointerReset() {
+    pointers.clear();
+
+    gesture = "none";
+
+    gestureStartX = 0;
+    gestureStartY = 0;
+
+    startOffsetX = offsetX;
+    startOffsetY = offsetY;
+
+    moved = false;
+
+    pinchStartDistance = 0;
+    pinchStartScale = scale;
+
+    pinchMidStartX = 0;
+    pinchMidStartY = 0;
+
+    pinchAnchorX = 0;
+    pinchAnchorY = 0;
   }
 
 
-  // --------------------------------------------------
-  // MIDPOINT
-  // --------------------------------------------------
-
-  function midpoint(a, b) {
-    return {
-      x:
-        (a.clientX + b.clientX) / 2,
-
-      y:
-        (a.clientY + b.clientY) / 2
-    };
-  }
-
-
-  // --------------------------------------------------
-  // START PINCH
-  // --------------------------------------------------
+  /* =========================================================
+     START PINCH
+  ========================================================= */
 
   function startPinch() {
-    if (pointerMap.size !== 2) {
+    if (pointers.size !== 2) {
       return;
     }
 
     const [a, b] =
-      [...pointerMap.values()];
+      [...pointers.values()];
 
-    pinchStartDistance =
+    const d =
       distance(a, b);
 
-    pinchStartScale =
-      scale;
+    if (d <= 0) {
+      return;
+    }
 
     const mid =
       midpoint(a, b);
 
     const local =
-      getLocalPoint(
+      localPoint(
         mid.x,
         mid.y
       );
 
-    /*
-     * Lưu vị trí nội tại trên ảnh
-     * nằm dưới tâm pinch.
-     *
-     * p = (screen - offset) / scale
-     */
+    pinchStartDistance = d;
 
+    pinchStartScale =
+      scale;
+
+    pinchMidStartX =
+      mid.x;
+
+    pinchMidStartY =
+      mid.y;
+
+    /*
+     * Điểm nội tại trên ảnh nằm dưới ngón tay.
+     *
+     * Khi pinch di chuyển:
+     * - ảnh phóng
+     * - ảnh cũng đi theo tâm 2 ngón
+     */
     pinchAnchorX =
       (
         local.x - offsetX
@@ -430,63 +466,89 @@
         local.y - offsetY
       ) / scale;
 
-    pinchActive = true;
+    gesture = "pinch";
 
-    dragging = false;
+    moved = true;
   }
 
 
-  // --------------------------------------------------
-  // UPDATE PINCH
-  // --------------------------------------------------
+  /* =========================================================
+     UPDATE PINCH
+     
+     QUAN TRỌNG:
+     
+     Không dùng:
+     scale = oldScale * rawDistanceRatio
+     
+     vì nó quá nhạy.
+     
+     Dùng power 0.45 để làm chậm zoom.
+  ========================================================= */
 
   function updatePinch() {
     if (
-      !pinchActive ||
-      pointerMap.size !== 2 ||
+      gesture !== "pinch" ||
+      pointers.size !== 2 ||
       pinchStartDistance <= 0
     ) {
       return;
     }
 
     const [a, b] =
-      [...pointerMap.values()];
+      [...pointers.values()];
 
     const currentDistance =
       distance(a, b);
 
-    const ratio =
+    if (currentDistance <= 0) {
+      return;
+    }
+
+    const rawRatio =
       currentDistance /
       pinchStartDistance;
 
+    /*
+     * Giảm độ nhạy rất mạnh.
+     *
+     * Ví dụ:
+     *
+     * ngón tay mở ra 2 lần
+     * => zoom khoảng 1.37 lần
+     *
+     * thay vì 2 lần.
+     */
+    const smoothRatio =
+      Math.pow(
+        rawRatio,
+        0.45
+      );
+
     let newScale =
-      pinchStartScale * ratio;
+      pinchStartScale *
+      smoothRatio;
 
     newScale =
-      Math.max(
+      clamp(
+        newScale,
         MIN_SCALE,
-        Math.min(
-          MAX_SCALE,
-          newScale
-        )
+        MAX_SCALE
       );
 
     const mid =
       midpoint(a, b);
 
     const local =
-      getLocalPoint(
+      localPoint(
         mid.x,
         mid.y
       );
 
-    /*
-     * Giữ nguyên chính xác điểm trên ảnh
-     * dưới tâm hai ngón tay.
-     */
-
     scale = newScale;
 
+    /*
+     * Giữ điểm đang xem.
+     */
     offsetX =
       local.x -
       pinchAnchorX * scale;
@@ -495,8 +557,9 @@
       local.y -
       pinchAnchorY * scale;
 
-    if (scale <= 1) {
+    if (scale <= 1.001) {
       scale = 1;
+
       offsetX = 0;
       offsetY = 0;
     }
@@ -505,9 +568,9 @@
   }
 
 
-  // --------------------------------------------------
-  // EVENTS: CLOSE / NAV
-  // --------------------------------------------------
+  /* =========================================================
+     BUTTONS
+  ========================================================= */
 
   closeBtn?.addEventListener(
     "click",
@@ -525,9 +588,9 @@
   );
 
 
-  // --------------------------------------------------
-  // CLICK BACKDROP
-  // --------------------------------------------------
+  /* =========================================================
+     BACKDROP
+  ========================================================= */
 
   viewer.addEventListener(
     "click",
@@ -544,9 +607,9 @@
   );
 
 
-  // --------------------------------------------------
-  // KEYBOARD
-  // --------------------------------------------------
+  /* =========================================================
+     KEYBOARD
+  ========================================================= */
 
   window.addEventListener(
     "keydown",
@@ -556,84 +619,97 @@
         return;
       }
 
-      if (
-        event.key === "Escape"
-      ) {
+      switch (event.key) {
 
-        event.preventDefault();
-        close();
-        return;
+        case "Escape":
 
-      }
+          event.preventDefault();
+          close();
 
-
-      if (
-        event.key === "ArrowLeft"
-      ) {
-
-        event.preventDefault();
-        go(-1);
-        return;
-
-      }
+          break;
 
 
-      if (
-        event.key === "ArrowRight"
-      ) {
+        case "ArrowLeft":
 
-        event.preventDefault();
-        go(1);
-        return;
+          event.preventDefault();
+          go(-1);
 
-      }
+          break;
 
 
-      if (
-        event.key === "+" ||
-        event.key === "="
-      ) {
+        case "ArrowRight":
 
-        event.preventDefault();
-        setZoom(
-          scale + 0.1
-        );
+          event.preventDefault();
+          go(1);
 
-        return;
-
-      }
+          break;
 
 
-      if (
-        event.key === "-"
-      ) {
+        case "+":
 
-        event.preventDefault();
-        setZoom(
-          scale - 0.1
-        );
+        case "=":
 
-        return;
+          event.preventDefault();
 
-      }
+          setZoom(
+            scale + 0.1
+          );
+
+          break;
 
 
-      if (
-        event.key === "0"
-      ) {
+        case "-":
 
-        event.preventDefault();
-        resetZoom();
+          event.preventDefault();
 
+          setZoom(
+            scale - 0.1
+          );
+
+          break;
+
+
+        case "0":
+
+          event.preventDefault();
+          resetZoom();
+
+          break;
       }
 
     }
   );
 
 
-  // --------------------------------------------------
-  // DESKTOP WHEEL
-  // --------------------------------------------------
+  /* =========================================================
+     SIMPLE SET ZOOM
+  ========================================================= */
+
+  function setZoom(newScale) {
+
+    scale =
+      clamp(
+        newScale,
+        MIN_SCALE,
+        MAX_SCALE
+      );
+
+    if (scale <= 1) {
+      scale = 1;
+
+      offsetX = 0;
+      offsetY = 0;
+    }
+
+    applyTransform();
+  }
+
+
+  /* =========================================================
+     DESKTOP WHEEL
+     
+     Nhẹ hơn trước rất nhiều.
+  ========================================================= */
 
   stage.addEventListener(
     "wheel",
@@ -646,22 +722,24 @@
       event.preventDefault();
 
       /*
-       * Wheel zoom nhỏ và mượt hơn.
+       * Trackpad / wheel:
+       * thay đổi chỉ 5% mỗi tick.
        */
-
       const direction =
         event.deltaY < 0
           ? 1
           : -1;
 
-      const amount =
-        1 + direction * 0.08;
+      const factor =
+        direction > 0
+          ? 1.05
+          : 0.95;
 
-      const nextScale =
-        scale * amount;
+      const targetScale =
+        scale * factor;
 
       zoomAt(
-        nextScale,
+        targetScale,
         event.clientX,
         event.clientY
       );
@@ -673,9 +751,14 @@
   );
 
 
-  // --------------------------------------------------
-  // DOUBLE CLICK
-  // --------------------------------------------------
+  /* =========================================================
+     DOUBLE CLICK / DOUBLE TAP
+     
+     1x -> 1.8x
+     1.8x -> 1x
+     
+     Không nhảy 2x/3x/4x.
+  ========================================================= */
 
   stage.addEventListener(
     "dblclick",
@@ -685,14 +768,14 @@
         return;
       }
 
-      if (scale > 1.01) {
+      if (scale > 1.05) {
 
         resetZoom();
 
       } else {
 
         zoomAt(
-          2,
+          1.8,
           event.clientX,
           event.clientY
         );
@@ -703,9 +786,9 @@
   );
 
 
-  // --------------------------------------------------
-  // POINTER DOWN
-  // --------------------------------------------------
+  /* =========================================================
+     POINTER DOWN
+  ========================================================= */
 
   stage.addEventListener(
     "pointerdown",
@@ -715,7 +798,7 @@
         return;
       }
 
-      pointerMap.set(
+      pointers.set(
         event.pointerId,
         {
           clientX: event.clientX,
@@ -728,55 +811,53 @@
       );
 
 
-      /*
-       * 2 ngón → pinch
-       */
+      /* -------------------------
+         2 ngón = PINCH
+      ------------------------- */
 
-      if (pointerMap.size === 2) {
-
+      if (pointers.size === 2) {
         startPinch();
         return;
-
       }
 
 
-      /*
-       * 1 ngón
-       */
+      /* -------------------------
+         1 ngón
+      ------------------------- */
 
-      if (pointerMap.size === 1) {
+      if (pointers.size === 1) {
 
-        dragging = true;
-        moved = false;
+        gesture = "one";
 
-        startX =
+        gestureStartX =
           event.clientX;
 
-        startY =
+        gestureStartY =
           event.clientY;
 
-        dragStartX =
+        startOffsetX =
           offsetX;
 
-        dragStartY =
+        startOffsetY =
           offsetY;
 
+        moved = false;
       }
 
     }
   );
 
 
-  // --------------------------------------------------
-  // POINTER MOVE
-  // --------------------------------------------------
+  /* =========================================================
+     POINTER MOVE
+  ========================================================= */
 
   stage.addEventListener(
     "pointermove",
     event => {
 
       if (
-        !pointerMap.has(
+        !pointers.has(
           event.pointerId
         )
       ) {
@@ -784,7 +865,7 @@
       }
 
 
-      pointerMap.set(
+      pointers.set(
         event.pointerId,
         {
           clientX: event.clientX,
@@ -793,27 +874,27 @@
       );
 
 
-      /*
-       * 2 ngón
-       */
+      /* -------------------------
+         PINCH
+      ------------------------- */
 
       if (
-        pointerMap.size === 2
+        pointers.size === 2
       ) {
 
         updatePinch();
-        return;
 
+        return;
       }
 
 
-      /*
-       * 1 ngón
-       */
+      /* -------------------------
+         SINGLE POINTER
+      ------------------------- */
 
       if (
-        !dragging ||
-        pointerMap.size !== 1
+        gesture !== "one" ||
+        pointers.size !== 1
       ) {
         return;
       }
@@ -821,11 +902,11 @@
 
       const dx =
         event.clientX -
-        startX;
+        gestureStartX;
 
       const dy =
         event.clientY -
-        startY;
+        gestureStartY;
 
 
       if (
@@ -837,16 +918,22 @@
 
 
       /*
-       * Chỉ kéo ảnh khi zoom.
+       * Nếu đã zoom:
+       * 1 ngón kéo ảnh.
        */
 
-      if (scale > 1) {
+      if (
+        scale > 1.001 &&
+        moved
+      ) {
 
         offsetX =
-          dragStartX + dx;
+          startOffsetX +
+          dx;
 
         offsetY =
-          dragStartY + dy;
+          startOffsetY +
+          dy;
 
         applyTransform();
 
@@ -856,100 +943,93 @@
   );
 
 
-  // --------------------------------------------------
-  // POINTER END
-  // --------------------------------------------------
+  /* =========================================================
+     POINTER END
+  ========================================================= */
 
   function endPointer(event) {
 
-    const wasPinching =
-      pinchActive;
+    const pointer =
+      pointers.get(
+        event.pointerId
+      );
 
-    pointerMap.delete(
+    pointers.delete(
       event.pointerId
     );
 
 
     /*
-     * Nếu vừa pinch xong
+     * Nếu vẫn còn 1 ngón:
+     * tiếp tục giữ trạng thái.
      */
-
     if (
-      pointerMap.size < 2
-    ) {
-      pinchActive = false;
-    }
-
-
-    /*
-     * Nếu vẫn còn 1 pointer,
-     * chuyển tiếp sang trạng thái kéo.
-     */
-
-    if (
-      pointerMap.size === 1
+      pointers.size === 1
     ) {
 
       const remaining =
-        [...pointerMap.values()][0];
+        [...pointers.values()][0];
 
-      dragging = true;
+      gesture = "one";
 
-      startX =
+      gestureStartX =
         remaining.clientX;
 
-      startY =
+      gestureStartY =
         remaining.clientY;
 
-      dragStartX =
+      startOffsetX =
         offsetX;
 
-      dragStartY =
+      startOffsetY =
         offsetY;
 
       return;
-
     }
 
 
     /*
-     * Không còn pointer.
+     * Không còn ngón.
      */
 
     if (
-      pointerMap.size === 0
+      pointers.size === 0
     ) {
 
-      dragging = false;
+      const wasGesture =
+        gesture;
+
+      gesture = "none";
 
 
       /*
-       * Swipe chỉ khi:
+       * Swipe:
        *
-       * - không zoom
-       * - không vừa pinch
-       * - kéo ngang
+       * chỉ khi:
+       * - ảnh đang ở 1x
+       * - gesture là one
        */
 
       if (
-        !wasPinching &&
-        scale === 1 &&
-        moved
+        wasGesture === "one" &&
+        scale <= 1.001 &&
+        moved &&
+        pointer
       ) {
 
         const dx =
           event.clientX -
-          startX;
+          gestureStartX;
 
         const dy =
           event.clientY -
-          startY;
+          gestureStartY;
 
 
         if (
-          Math.abs(dx) > 60 &&
+          Math.abs(dx) >= 60 &&
           Math.abs(dx) >
-            Math.abs(dy) * 1.15
+            Math.abs(dy) * 1.2
         ) {
 
           go(
@@ -961,6 +1041,8 @@
         }
 
       }
+
+      moved = false;
 
     }
 
@@ -977,31 +1059,22 @@
     endPointer
   );
 
-  stage.addEventListener(
-    "pointerout",
+
+  /* =========================================================
+     CONTEXT MENU OFF
+  ========================================================= */
+
+  image.addEventListener(
+    "contextmenu",
     event => {
-
-      /*
-       * Không xử lý swipe tại đây.
-       * Tránh mất pointer trên mobile.
-       */
-
-      if (
-        event.pointerId &&
-        pointerMap.has(
-          event.pointerId
-        )
-      ) {
-        return;
-      }
-
+      event.preventDefault();
     }
   );
 
 
-  // --------------------------------------------------
-  // PUBLIC API
-  // --------------------------------------------------
+  /* =========================================================
+     PUBLIC
+  ========================================================= */
 
   window.TourViewer = {
     open,
